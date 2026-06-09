@@ -14,6 +14,9 @@ einops>=0.8.0
 # Hugging Face upload/download
 huggingface_hub>=0.24.0
 
+# Cloud jobs
+modal>=1.1.0
+
 # GGUF / llama.cpp app and eval
 llama-cpp-python>=0.2.90
 
