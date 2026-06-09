@@ -1,0 +1,64 @@
+# Python environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python caches and build output
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.token
+
+# Hugging Face and model artifacts
+outputs/**
+!outputs/
+!outputs/gguf/
+!outputs/gguf/README.md
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+adapter_model.bin
+adapter_model.safetensors
+
+# Training and evaluation run output
+wandb/
+runs/
+logs/
+trackio/
+checkpoint-*/
+
+# llama.cpp clones/builds
+third_party/
+external/
+llama.cpp/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
