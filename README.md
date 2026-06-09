@@ -37,7 +37,7 @@ python scripts/train.py \
   --train-file data/train.jsonl \
   --validation-file data/validation.jsonl \
   --output-dir outputs/mythograph-nemotron-lora \
-  --hub-model-id build-small-hackathon/mythograph-nemotron-3-nano-4b-lora \
+  --hub-model-id mythograph-nemotron-3-nano-4b-lora \
   --push-to-hub
 ```
 
@@ -85,7 +85,7 @@ MODEL_PATH=outputs/gguf/mythograph-nemotron-Q5_K_M.gguf python app.py
 Run from Hugging Face Hub:
 
 ```bash
-MODEL_REPO=build-small-hackathon/mythograph-nemotron-3-nano-4b-gguf \
+MODEL_REPO=mythograph-nemotron-3-nano-4b-gguf \
 MODEL_FILE=mythograph-nemotron-Q5_K_M.gguf \
 python app.py
 ```

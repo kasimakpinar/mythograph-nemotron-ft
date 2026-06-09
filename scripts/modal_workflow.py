@@ -6,18 +6,16 @@ Authentication:
   2. Create a Modal secret named "huggingface" with key HF_TOKEN.
 
 Common runs:
-  modal run scripts/modal_workflow.py --action train --adapter-repo build-small-hackathon/mythograph-nemotron-3-nano-4b-lora
-  modal run scripts/modal_workflow.py --action merge --merged-repo build-small-hackathon/mythograph-nemotron-3-nano-4b-merged
-  modal run scripts/modal_workflow.py --action gguf --gguf-repo build-small-hackathon/mythograph-nemotron-3-nano-4b-gguf
+  modal run --detach scripts/modal_workflow.py --action train
+  modal run --detach scripts/modal_workflow.py --action merge --adapter-repo /vol/outputs/mythograph-nemotron-lora
+  modal run --detach scripts/modal_workflow.py --action gguf
 """
 
 from __future__ import annotations
 
 import json
-import os
-import shutil
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Optional
 
 import modal
@@ -28,8 +26,8 @@ VOLUME_NAME = "mythograph-nemotron-ft-cache"
 HF_SECRET_NAME = "huggingface"
 BASE_MODEL = "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"
 
-REMOTE_ROOT = Path("/workspace/mythograph-nemotron-ft")
-VOLUME_ROOT = Path("/vol")
+REMOTE_ROOT = PurePosixPath("/workspace/mythograph-nemotron-ft")
+VOLUME_ROOT = PurePosixPath("/vol")
 TRAIN_FILE = REMOTE_ROOT / "data/train.jsonl"
 VALIDATION_FILE = REMOTE_ROOT / "data/validation.jsonl"
 ADAPTER_DIR = VOLUME_ROOT / "outputs/mythograph-nemotron-lora"
@@ -40,15 +38,16 @@ GGUF_DIR = VOLUME_ROOT / "outputs/gguf"
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 
 image = (
-    modal.Image.debian_slim(python_version="3.11")
-    .apt_install("bash", "build-essential", "cmake", "curl", "git")
+    modal.Image.from_registry("nvidia/cuda:12.4.1-devel-ubuntu22.04", add_python="3.11")
+    .apt_install("bash", "build-essential", "cmake", "curl", "git", "ninja-build")
+    .pip_install("torch==2.6.0", index_url="https://download.pytorch.org/whl/cu124")
+    .pip_install("pip>=26.1.2", "wheel", "packaging", "ninja")
     .pip_install(
-        "torch>=2.3.0",
-        "transformers>=4.52.0",
+        "transformers==4.52.4",
         "datasets>=2.20.0",
         "accelerate>=0.33.0",
-        "peft>=0.12.0",
-        "trl>=0.10.0",
+        "peft==0.15.2",
+        "trl==0.17.0",
         "bitsandbytes>=0.43.0",
         "safetensors>=0.4.3",
         "sentencepiece>=0.2.0",
@@ -56,11 +55,18 @@ image = (
         "einops>=0.8.0",
         "huggingface_hub>=0.24.0",
     )
+    .pip_install(
+        "causal-conv1d==1.5.0.post8",
+        "mamba-ssm==2.2.4",
+        extra_options="--no-build-isolation --no-deps",
+        env={"MAX_JOBS": "4", "MAMBA_FORCE_CXX11_ABI": "FALSE"},
+        gpu="A100",
+    )
     .env(
         {
             "HF_HOME": str(VOLUME_ROOT / "hf-cache"),
             "TRANSFORMERS_CACHE": str(VOLUME_ROOT / "hf-cache"),
-            "HF_HUB_ENABLE_HF_TRANSFER": "1",
+            "HF_XET_HIGH_PERFORMANCE": "1",
             "TOKENIZERS_PARALLELISM": "false",
         }
     )
@@ -69,20 +75,38 @@ image = (
 app = modal.App(APP_NAME, image=image, volumes={str(VOLUME_ROOT): volume})
 
 
-def _run(cmd: list[str], cwd: Path = REMOTE_ROOT) -> None:
+def _as_path(path: PurePosixPath | str) -> Path:
+    return Path(str(path))
+
+
+def _run(cmd: list[str], cwd: PurePosixPath = REMOTE_ROOT) -> None:
     print("+", " ".join(cmd))
     subprocess.run(cmd, cwd=str(cwd), check=True)
 
 
+def _print_spawned_call(action: str, call: modal.FunctionCall) -> None:
+    print(
+        json.dumps(
+            {
+                "action": action,
+                "status": "spawned",
+                "function_call_id": call.object_id,
+                "dashboard_url": call.get_dashboard_url(),
+            },
+            indent=2,
+        )
+    )
+
+
 def _write_jsonl_data(train_jsonl: str, validation_jsonl: str) -> None:
-    (REMOTE_ROOT / "data").mkdir(parents=True, exist_ok=True)
-    TRAIN_FILE.write_text(train_jsonl, encoding="utf-8")
-    VALIDATION_FILE.write_text(validation_jsonl, encoding="utf-8")
+    _as_path(REMOTE_ROOT / "data").mkdir(parents=True, exist_ok=True)
+    _as_path(TRAIN_FILE).write_text(train_jsonl, encoding="utf-8")
+    _as_path(VALIDATION_FILE).write_text(validation_jsonl, encoding="utf-8")
 
 
-def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+def _load_jsonl(path: PurePosixPath) -> list[dict[str, Any]]:
     rows = []
-    with path.open("r", encoding="utf-8") as f:
+    with _as_path(path).open("r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
                 rows.append(json.loads(line))
@@ -106,6 +130,13 @@ def _validate_source_data() -> dict[str, dict[str, int]]:
     return summary
 
 
+def _sanitize_generation_config(model: Any) -> None:
+    generation_config = getattr(model, "generation_config", None)
+    if generation_config is not None and not getattr(generation_config, "do_sample", False):
+        generation_config.top_p = None
+        generation_config.temperature = None
+
+
 @app.function(
     gpu="A100",
     cpu=8,
@@ -127,19 +158,14 @@ def train_lora(
     import torch
     from datasets import load_dataset
     from peft import LoraConfig
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import SFTConfig, SFTTrainer
-
-    try:
-        from trl import DataCollatorForCompletionOnlyLM
-    except ImportError:
-        DataCollatorForCompletionOnlyLM = None
 
     _write_jsonl_data(train_jsonl, validation_jsonl)
     summary = _validate_source_data()
     print(json.dumps(summary, indent=2))
 
-    ADAPTER_DIR.mkdir(parents=True, exist_ok=True)
+    _as_path(ADAPTER_DIR).mkdir(parents=True, exist_ok=True)
 
     tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
     if tokenizer.pad_token is None:
@@ -150,12 +176,6 @@ def train_lora(
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
         device_map="auto",
-        quantization_config=BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_use_double_quant=True,
-        ),
     )
     model.config.use_cache = False
 
@@ -171,20 +191,6 @@ def train_lora(
         }
 
     dataset = dataset.map(add_text, remove_columns=dataset["train"].column_names)
-
-    data_collator = None
-    if DataCollatorForCompletionOnlyLM is not None:
-        sentinel = "MYTHOGRAPH_ASSISTANT_SENTINEL"
-        rendered = tokenizer.apply_chat_template(
-            [{"role": "assistant", "content": sentinel}],
-            tokenize=False,
-            add_generation_prompt=False,
-        )
-        response_template = rendered.split(sentinel, 1)[0]
-        if tokenizer.bos_token and response_template.startswith(tokenizer.bos_token):
-            response_template = response_template[len(tokenizer.bos_token) :]
-        if response_template:
-            data_collator = DataCollatorForCompletionOnlyLM(response_template=response_template, tokenizer=tokenizer)
 
     supported = set(inspect.signature(SFTConfig).parameters)
     config_kwargs: Dict[str, Any] = {
@@ -229,7 +235,7 @@ def train_lora(
             lora_dropout=0.05,
             bias="none",
             task_type="CAUSAL_LM",
-            target_modules="all-linear",
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj"],
         ),
         "tokenizer": tokenizer,
         "dataset_text_field": "text",
@@ -240,9 +246,6 @@ def train_lora(
         trainer_kwargs.pop("tokenizer", None)
     if "dataset_text_field" not in trainer_supported:
         trainer_kwargs.pop("dataset_text_field", None)
-    if data_collator is not None:
-        trainer_kwargs["data_collator"] = data_collator
-
     trainer = SFTTrainer(**{k: v for k, v in trainer_kwargs.items() if k in trainer_supported})
     trainer.train()
     trainer.save_model(str(ADAPTER_DIR))
@@ -269,7 +272,7 @@ def merge_lora(
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     adapter = adapter_repo_or_path or str(ADAPTER_DIR)
-    MERGED_DIR.mkdir(parents=True, exist_ok=True)
+    _as_path(MERGED_DIR).mkdir(parents=True, exist_ok=True)
 
     tokenizer = AutoTokenizer.from_pretrained(adapter, trust_remote_code=True)
     base = AutoModelForCausalLM.from_pretrained(
@@ -280,6 +283,7 @@ def merge_lora(
     )
     model = PeftModel.from_pretrained(base, adapter)
     merged = model.merge_and_unload()
+    _sanitize_generation_config(merged)
     merged.save_pretrained(str(MERGED_DIR), safe_serialization=True)
     tokenizer.save_pretrained(str(MERGED_DIR))
 
@@ -294,44 +298,48 @@ def merge_lora(
 @app.function(cpu=12, memory=65536, timeout=4 * 60 * 60, secrets=[modal.Secret.from_name(HF_SECRET_NAME)])
 def build_gguf(gguf_repo: Optional[str] = None, prefix: str = "mythograph-nemotron") -> dict[str, str]:
     llama_cpp_dir = VOLUME_ROOT / "third_party/llama.cpp"
-    GGUF_DIR.mkdir(parents=True, exist_ok=True)
+    _as_path(GGUF_DIR).mkdir(parents=True, exist_ok=True)
 
-    if not llama_cpp_dir.exists():
+    if not _as_path(llama_cpp_dir).exists():
         _run(["git", "clone", "https://github.com/ggml-org/llama.cpp.git", str(llama_cpp_dir)], cwd=VOLUME_ROOT)
 
     _run(["python", "-m", "pip", "install", "-r", str(llama_cpp_dir / "requirements.txt")], cwd=llama_cpp_dir)
 
     f16 = GGUF_DIR / f"{prefix}-F16.gguf"
-    _run(
-        [
-            "python",
-            str(llama_cpp_dir / "convert_hf_to_gguf.py"),
-            str(MERGED_DIR),
-            "--outfile",
-            str(f16),
-            "--outtype",
-            "f16",
-        ],
-        cwd=llama_cpp_dir,
-    )
+    if not _as_path(f16).exists():
+        _run(
+            [
+                "python",
+                str(llama_cpp_dir / "convert_hf_to_gguf.py"),
+                str(MERGED_DIR),
+                "--outfile",
+                str(f16),
+                "--outtype",
+                "f16",
+            ],
+            cwd=llama_cpp_dir,
+        )
 
-    _run(["cmake", "-S", str(llama_cpp_dir), "-B", str(llama_cpp_dir / "build"), "-DCMAKE_BUILD_TYPE=Release"], cwd=llama_cpp_dir)
-    _run(["cmake", "--build", str(llama_cpp_dir / "build"), "--config", "Release", "-j", "--target", "llama-quantize"], cwd=llama_cpp_dir)
+    if not _as_path(llama_cpp_dir / "build/bin/llama-quantize").exists():
+        _run(["cmake", "-S", str(llama_cpp_dir), "-B", str(llama_cpp_dir / "build"), "-DCMAKE_BUILD_TYPE=Release"], cwd=llama_cpp_dir)
+        _run(["cmake", "--build", str(llama_cpp_dir / "build"), "--config", "Release", "-j", "--target", "llama-quantize"], cwd=llama_cpp_dir)
 
     quantize = llama_cpp_dir / "build/bin/llama-quantize"
-    if not quantize.exists():
+    if not _as_path(quantize).exists():
         quantize = llama_cpp_dir / "build/bin/quantize"
-    if not quantize.exists():
+    if not _as_path(quantize).exists():
         raise FileNotFoundError(f"Could not find llama.cpp quantizer under {llama_cpp_dir / 'build'}")
 
     q4 = GGUF_DIR / f"{prefix}-Q4_K_M.gguf"
     q5 = GGUF_DIR / f"{prefix}-Q5_K_M.gguf"
-    _run([str(quantize), str(f16), str(q4), "Q4_K_M"], cwd=llama_cpp_dir)
-    _run([str(quantize), str(f16), str(q5), "Q5_K_M"], cwd=llama_cpp_dir)
+    if not _as_path(q4).exists():
+        _run([str(quantize), str(f16), str(q4), "Q4_K_M"], cwd=llama_cpp_dir)
+    if not _as_path(q5).exists():
+        _run([str(quantize), str(f16), str(q5), "Q5_K_M"], cwd=llama_cpp_dir)
 
     readme = GGUF_DIR / "README.md"
-    if not readme.exists():
-        readme.write_text(
+    if not _as_path(readme).exists():
+        _as_path(readme).write_text(
             """---
 base_model: nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
 library_name: llama.cpp
@@ -364,15 +372,20 @@ The base model is `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and is governed by the
     if gguf_repo:
         from huggingface_hub import HfApi, create_repo
 
-        create_repo(gguf_repo, repo_type="model", exist_ok=True)
         api = HfApi()
+        repo_id = gguf_repo
+        if "/" not in repo_id:
+            repo_id = f"{api.whoami()['name']}/{repo_id}"
+        create_repo(repo_id, repo_type="model", exist_ok=True)
+        print(f"Uploading GGUF files to https://huggingface.co/{repo_id}")
         for path in [q4, q5, readme]:
             api.upload_file(
                 path_or_fileobj=str(path),
                 path_in_repo=path.name,
-                repo_id=gguf_repo,
+                repo_id=repo_id,
                 repo_type="model",
             )
+        gguf_repo = repo_id
 
     volume.commit()
     return {"f16": str(f16), "q4": str(q4), "q5": str(q5), "gguf_repo": gguf_repo or ""}
@@ -382,9 +395,9 @@ The base model is `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` and is governed by the
 def main(
     action: str = "train",
     gpu: str = "A100",
-    adapter_repo: str = "build-small-hackathon/mythograph-nemotron-3-nano-4b-lora",
+    adapter_repo: str = "mythograph-nemotron-3-nano-4b-lora",
     merged_repo: str = "",
-    gguf_repo: str = "build-small-hackathon/mythograph-nemotron-3-nano-4b-gguf",
+    gguf_repo: str = "mythograph-nemotron-3-nano-4b-gguf",
     epochs: float = 3.0,
     max_seq_length: int = 4096,
 ) -> None:
@@ -392,7 +405,7 @@ def main(
     validation_jsonl = Path("data/validation.jsonl").read_text(encoding="utf-8")
 
     if action == "train":
-        result = train_lora.with_options(gpu=gpu).remote(
+        call = train_lora.with_options(gpu=gpu).spawn(
             train_jsonl,
             validation_jsonl,
             adapter_repo,
@@ -401,10 +414,16 @@ def main(
             1e-4,
             max_seq_length,
         )
+        _print_spawned_call(action, call)
+        return
     elif action == "merge":
-        result = merge_lora.with_options(gpu=gpu).remote(adapter_repo or str(ADAPTER_DIR), merged_repo or None, BASE_MODEL)
+        call = merge_lora.with_options(gpu=gpu).spawn(adapter_repo or str(ADAPTER_DIR), merged_repo or None, BASE_MODEL)
+        _print_spawned_call(action, call)
+        return
     elif action == "gguf":
-        result = build_gguf.remote(gguf_repo, "mythograph-nemotron")
+        call = build_gguf.spawn(gguf_repo, "mythograph-nemotron")
+        _print_spawned_call(action, call)
+        return
     elif action == "all":
         train_result = train_lora.with_options(gpu=gpu).remote(
             train_jsonl,
