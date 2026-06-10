@@ -7,6 +7,7 @@ This folder contains the data, QLoRA fine-tuning scripts, JSON/schema evaluation
 ```text
 app.py                        # Gradio demo using llama-cpp-python
 requirements.txt              # training/eval/app dependencies
+reports/                      # fine-tuning result reports and run summaries
 README_QUANTIZATION.md        # conversion and quantization instructions
 data/train.jsonl              # source training data, chat JSONL
 data/validation.jsonl         # source validation data, chat JSONL
@@ -18,6 +19,17 @@ scripts/convert_to_gguf.sh    # merged HF model -> F16 GGUF
 scripts/quantize_gguf.sh      # F16 GGUF -> Q4_K_M and Q5_K_M
 scripts/upload_gguf.py        # upload GGUF files to Hugging Face
 ```
+
+## Latest Results
+
+The latest fine-tuning run is summarized in:
+
+- [reports/2026-06-10-finetuning-results-report.md](reports/2026-06-10-finetuning-results-report.md)
+
+Published Hugging Face artifacts:
+
+- LoRA adapter: https://huggingface.co/kasimakpinar/mythograph-nemotron-3-nano-4b-lora
+- GGUF Q4/Q5 model: https://huggingface.co/kasimakpinar/mythograph-nemotron-3-nano-4b-gguf
 
 ## Validate the Data
 
