@@ -117,13 +117,15 @@ def _validate_source_data() -> dict[str, dict[str, int]]:
     summary: dict[str, dict[str, int]] = {}
     for split, path in [("train", TRAIN_FILE), ("validation", VALIDATION_FILE)]:
         rows = _load_jsonl(path)
-        counts = {"conversation_turn": 0, "final_art_recipe": 0}
+        counts = {"conversation_turn": 0, "final_art_recipe": 0, "conversation_starters": 0}
         for row in rows:
             assistant_obj = json.loads(row["messages"][-1]["content"])
             if "controls" in assistant_obj or "assistant_message" in assistant_obj:
                 counts["conversation_turn"] += 1
             elif "image_prompt" in assistant_obj or "friend_explanation" in assistant_obj:
                 counts["final_art_recipe"] += 1
+            elif "starters" in assistant_obj:
+                counts["conversation_starters"] += 1
             else:
                 raise ValueError(f"Unknown assistant schema in {split}")
         summary[split] = {"rows": len(rows), **counts}
