@@ -22,7 +22,7 @@ image = (
     modal.Image.from_registry("nvidia/cuda:12.4.1-devel-ubuntu22.04", add_python="3.11")
     .apt_install("git", "ffmpeg", "libgl1", "libglib2.0-0")
     .pip_install("pip>=26.1.2", "wheel", "packaging")
-    .pip_install("torch", "torchvision", index_url="https://download.pytorch.org/whl/cu124")
+    .pip_install("torch", "torchvision", "torchaudio", index_url="https://download.pytorch.org/whl/cu124")
     .pip_install(
         "accelerate",
         "transformers",
