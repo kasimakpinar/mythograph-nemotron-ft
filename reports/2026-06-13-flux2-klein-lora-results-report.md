@@ -59,6 +59,69 @@ Key training settings:
 
 Training-time transformer quantization was enabled in the ai-toolkit config to reduce GPU memory use. This does not mean the uploaded artifact is a quantized model; the published file is a standard LoRA `.safetensors` checkpoint.
 
+## Training Metrics and Learning Rate
+
+Unlike the Nemotron text fine-tune, this FLUX LoRA run did not produce a held-out validation loss or token accuracy metric. The useful numeric training signal available from the Modal logs is the per-step training loss reported by ai-toolkit, together with the learning-rate value used at each step. For image LoRA training, these loss values are helpful for spotting obvious instability, but visual sample review is still the main quality check.
+
+Learning-rate summary:
+
+| Metric | Value |
+| --- | ---: |
+| Configured learning rate | `0.0001` |
+| Scheduler behavior observed in logs | constant |
+| First logged learning rate | `0.0001` |
+| Final logged learning rate | `0.0001` |
+| Minimum logged learning rate | `0.0001` |
+| Maximum logged learning rate | `0.0001` |
+
+The learning rate did not decay or warm down during this run. Every parsed training-progress line reported `lr: 1.0e-04`, so the effective schedule was a flat `1e-4` learning rate for all 1,800 optimizer steps.
+
+Loss summary from parsed Modal logs:
+
+| Metric | Value |
+| --- | ---: |
+| Parsed optimizer steps | `1,800` |
+| First logged loss | `1.0520` |
+| Final logged loss | `0.6265` |
+| Minimum logged loss | `0.1926` |
+| Maximum logged loss | `1.2570` |
+| Mean logged loss | `0.8269` |
+| Median logged loss | `0.8165` |
+
+Loss by training interval:
+
+| Steps | Parsed Steps | Mean Loss | Median Loss | Min Loss | Max Loss |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0-249 | `250` | `0.8374` | `0.8321` | `0.2043` | `1.2420` |
+| 250-499 | `250` | `0.8283` | `0.8224` | `0.2065` | `1.2330` |
+| 500-749 | `250` | `0.8408` | `0.8158` | `0.1951` | `1.2430` |
+| 750-999 | `250` | `0.8153` | `0.8135` | `0.1984` | `1.2180` |
+| 1000-1249 | `250` | `0.8385` | `0.8402` | `0.1940` | `1.2570` |
+| 1250-1499 | `250` | `0.8338` | `0.8260` | `0.2095` | `1.2400` |
+| 1500-1749 | `250` | `0.7992` | `0.7755` | `0.1926` | `1.2530` |
+| 1750-1799 | `50` | `0.8017` | `0.7627` | `0.2512` | `1.2010` |
+
+Selected checkpoint-step losses:
+
+| Step | Learning Rate | Logged Loss |
+| ---: | ---: | ---: |
+| 0 | `0.0001` | `1.0520` |
+| 250 | `0.0001` | `0.8288` |
+| 500 | `0.0001` | `0.8761` |
+| 750 | `0.0001` | `0.9523` |
+| 1000 | `0.0001` | `0.8441` |
+| 1250 | `0.0001` | `0.7655` |
+| 1500 | `0.0001` | `0.8194` |
+| 1750 | `0.0001` | `0.7878` |
+| 1799 | `0.0001` | `0.6265` |
+
+Interpretation:
+
+- The flat `1e-4` learning rate was stable for the full run; there were no obvious loss spikes, divergence events, or NaN/inf failures in the parsed progress logs.
+- Loss moved within a relatively narrow range for most of training, with the mean dropping from about `0.84` in the first 250 steps to about `0.80` in the last 300 steps.
+- The loss curve alone does not prove that the final checkpoint is best. The visual samples showed the late checkpoints had the strongest Mythograph Atelier style, which is why the final 1,800-step LoRA was uploaded.
+- If a future run looks over-stylized, the first thing to test is not necessarily a lower learning rate; try inference at lower LoRA strength and compare the 1,250 or 1,500-step checkpoints first.
+
 ## Checkpoints
 
 Saved checkpoints on the Modal volume:
