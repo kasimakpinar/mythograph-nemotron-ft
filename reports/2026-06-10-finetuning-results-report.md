@@ -9,7 +9,7 @@ Delivery formats: LoRA adapter and GGUF quantized models
 
 This run fine-tuned NVIDIA Nemotron 3 Nano 4B for the Mythograph Atelier assistant behavior: warm conversational art guidance, strict JSON responses, final abstract art recipes, and conversation starter generation.
 
-The fine-tuning completed successfully on Modal using the new dataset in `data/train.jsonl` and `data/validation.jsonl`. The LoRA adapter was uploaded to Hugging Face, then merged into the BF16 base model on Modal, converted to GGUF, quantized to Q4_K_M and Q5_K_M, and uploaded to Hugging Face.
+The fine-tuning completed successfully on Modal using the new dataset now stored in `nemotron_dataset/train.jsonl` and `nemotron_dataset/validation.jsonl`. At the time of the original run, this folder was named `data`. The LoRA adapter was uploaded to Hugging Face, then merged into the BF16 base model on Modal, converted to GGUF, quantized to Q4_K_M and Q5_K_M, and uploaded to Hugging Face.
 
 Final training metrics were healthy for this type of supervised fine-tuning run:
 
@@ -70,8 +70,8 @@ The second commit was needed because the new dataset includes a third task type,
 
 Source files:
 
-- `data/train.jsonl`
-- `data/validation.jsonl`
+- `nemotron_dataset/train.jsonl`
+- `nemotron_dataset/validation.jsonl`
 
 Total examples:
 
@@ -272,7 +272,7 @@ python scripts/eval_json.py \
   --backend llama_cpp \
   --repo-id kasimakpinar/mythograph-nemotron-3-nano-4b-gguf \
   --filename mythograph-nemotron-Q5_K_M.gguf \
-  --validation-file data/validation.jsonl \
+  --validation-file nemotron_dataset/validation.jsonl \
   --out-dir outputs/eval_q5 \
   --temperature 0.2 \
   --max-new-tokens 900

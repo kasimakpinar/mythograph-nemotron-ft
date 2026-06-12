@@ -51,6 +51,8 @@ def validate_row(row: Dict[str, Any], path: Path, index: int) -> str:
         return "conversation_turn"
     if "image_prompt" in assistant_json or "friend_explanation" in assistant_json:
         return "final_art_recipe"
+    if "starters" in assistant_json:
+        return "conversation_starters"
     raise ValueError(f"{path}:{index + 1} assistant JSON does not match a known task schema")
 
 
@@ -63,8 +65,8 @@ def write_jsonl(rows: Iterable[Dict[str, Any]], path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate Mythograph chat JSONL data for SFT.")
-    parser.add_argument("--train-file", default="data/train.jsonl")
-    parser.add_argument("--validation-file", default="data/validation.jsonl")
+    parser.add_argument("--train-file", default="nemotron_dataset/train.jsonl")
+    parser.add_argument("--validation-file", default="nemotron_dataset/validation.jsonl")
     parser.add_argument("--out-dir", default=None, help="Optional directory for validated train/validation JSONL copies.")
     args = parser.parse_args()
 
@@ -74,7 +76,7 @@ def main() -> None:
     for split, file_name in [("train", args.train_file), ("validation", args.validation_file)]:
         path = Path(file_name)
         rows = load_jsonl(path)
-        counts = {"conversation_turn": 0, "final_art_recipe": 0}
+        counts = {"conversation_turn": 0, "final_art_recipe": 0, "conversation_starters": 0}
         for index, row in enumerate(rows):
             task = validate_row(row, path, index)
             counts[task] += 1

@@ -30,6 +30,7 @@ outputs/**
 !outputs/
 !outputs/gguf/
 !outputs/gguf/README.md
+flux_lora_dataset_prepared/
 *.gguf
 *.safetensors
 *.bin

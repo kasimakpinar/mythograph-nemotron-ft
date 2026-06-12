@@ -11,20 +11,20 @@ Examples:
   python scripts/eval_json.py \
     --backend transformers \
     --model outputs/mythograph-nemotron-merged \
-    --validation-file data/validation.jsonl \
+    --validation-file nemotron_dataset/validation.jsonl \
     --out-dir outputs/eval_merged
 
   python scripts/eval_json.py \
     --backend llama_cpp \
     --gguf outputs/gguf/mythograph-nemotron-Q5_K_M.gguf \
-    --validation-file data/validation.jsonl \
+    --validation-file nemotron_dataset/validation.jsonl \
     --out-dir outputs/eval_q5
 
   python scripts/eval_json.py \
     --backend llama_cpp \
     --repo-id build-small-hackathon/mythograph-nemotron-3-nano-4b-gguf \
     --filename mythograph-nemotron-Q5_K_M.gguf \
-    --validation-file data/validation.jsonl \
+    --validation-file nemotron_dataset/validation.jsonl \
     --out-dir outputs/eval_q5_hub
 """
 
@@ -580,7 +580,7 @@ def evaluate(args: argparse.Namespace) -> Dict[str, Any]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate strict JSON/schema quality for Mythograph Atelier models.")
     parser.add_argument("--backend", choices=["transformers", "llama_cpp", "file"], required=True)
-    parser.add_argument("--validation-file", default="data/validation.jsonl")
+    parser.add_argument("--validation-file", default="nemotron_dataset/validation.jsonl")
     parser.add_argument("--out-dir", default="outputs/eval")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--print-every", type=int, default=10)

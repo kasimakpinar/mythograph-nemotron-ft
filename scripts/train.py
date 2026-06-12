@@ -26,8 +26,8 @@ DEFAULT_BASE_MODEL = "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fine-tune Nemotron 3 Nano 4B with QLoRA.")
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL)
-    parser.add_argument("--train-file", default="data/train.jsonl")
-    parser.add_argument("--validation-file", default="data/validation.jsonl")
+    parser.add_argument("--train-file", default="nemotron_dataset/train.jsonl")
+    parser.add_argument("--validation-file", default="nemotron_dataset/validation.jsonl")
     parser.add_argument("--output-dir", default="outputs/mythograph-nemotron-lora")
     parser.add_argument("--hub-model-id", default=None, help="Optional adapter repo id to push, e.g. user/mythograph-nemotron-lora")
     parser.add_argument("--epochs", type=float, default=3.0)

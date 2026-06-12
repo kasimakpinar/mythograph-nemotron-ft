@@ -1,0 +1,52 @@
+job: extension
+config:
+  name: mythograph_flux2_klein_lora
+  process:
+    - type: sd_trainer
+      training_folder: /workspace/outputs
+      device: cuda:0
+      trigger_word: "MYTHABS1"
+      network:
+        type: lora
+        linear: 128
+        linear_alpha: 64
+        conv: 64
+        conv_alpha: 32
+      save:
+        dtype: bf16
+        save_every: 250
+        max_step_saves_to_keep: 8
+        push_to_hub: false
+      datasets:
+        - folder_path: "/workspace/datasets/flux_lora_dataset"
+          caption_ext: "txt"
+          resolution: [512, 768, 1024]
+      train:
+        batch_size: 1
+        steps: 1800
+        gradient_accumulation_steps: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 0.0001
+        dtype: bf16
+      model:
+        name_or_path: "black-forest-labs/FLUX.2-klein-base-4B"
+        arch: "flux2_klein_4b"
+        quantize: true
+      sample:
+        sampler: flowmatch
+        sample_every: 250
+        width: 1024
+        height: 1024
+        prompts:
+          - "MYTHABS1. A quiet abstract painting about being tired but still trying, with a heavy soft gray area pressing from above, a small warm circle near the lower center, thin uneven lines moving forward, and a pale open space near one edge. no text"
+          - "MYTHABS1. A simple abstract painting about the joy of spring, with a warm yellow-orange glow in the center, darker blue edges fading away, small colorful dots scattered like flower smells, and playful bright shapes gathering on the right side. no text"
+          - "MYTHABS1. A clean quiet abstract painting about space returning after a hard week, with a large open center, small scattered marks near the edges, and soft horizontal settling lines. no text"
+          - "MYTHABS1. A gentle abstract painting about becoming someone new while missing the old self, with a pale soft shape on one side, a stronger darker shape on the other, a warm connecting line between them, and small gentle marks showing softness inside strength. no text"
+        neg: "text, words, letters, signature, watermark, photorealism, realistic portrait"
+meta:
+  name: "mythograph_flux2_klein_lora"
+  version: "v1"

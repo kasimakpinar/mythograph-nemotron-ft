@@ -65,7 +65,7 @@ outputs/gguf/mythograph-nemotron-Q5_K_M.gguf
 python scripts/eval_json.py \
   --backend llama_cpp \
   --gguf outputs/gguf/mythograph-nemotron-Q5_K_M.gguf \
-  --validation-file data/validation.jsonl \
+  --validation-file nemotron_dataset/validation.jsonl \
   --out-dir outputs/eval_q5 \
   --temperature 0.2 \
   --max-new-tokens 900
@@ -73,7 +73,7 @@ python scripts/eval_json.py \
 python scripts/eval_json.py \
   --backend llama_cpp \
   --gguf outputs/gguf/mythograph-nemotron-Q4_K_M.gguf \
-  --validation-file data/validation.jsonl \
+  --validation-file nemotron_dataset/validation.jsonl \
   --out-dir outputs/eval_q4 \
   --temperature 0.2 \
   --max-new-tokens 900

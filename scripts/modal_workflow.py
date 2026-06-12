@@ -28,8 +28,8 @@ BASE_MODEL = "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16"
 
 REMOTE_ROOT = PurePosixPath("/workspace/mythograph-nemotron-ft")
 VOLUME_ROOT = PurePosixPath("/vol")
-TRAIN_FILE = REMOTE_ROOT / "data/train.jsonl"
-VALIDATION_FILE = REMOTE_ROOT / "data/validation.jsonl"
+TRAIN_FILE = REMOTE_ROOT / "nemotron_dataset/train.jsonl"
+VALIDATION_FILE = REMOTE_ROOT / "nemotron_dataset/validation.jsonl"
 ADAPTER_DIR = VOLUME_ROOT / "outputs/mythograph-nemotron-lora"
 MERGED_DIR = VOLUME_ROOT / "outputs/mythograph-nemotron-merged"
 GGUF_DIR = VOLUME_ROOT / "outputs/gguf"
@@ -99,7 +99,7 @@ def _print_spawned_call(action: str, call: modal.FunctionCall) -> None:
 
 
 def _write_jsonl_data(train_jsonl: str, validation_jsonl: str) -> None:
-    _as_path(REMOTE_ROOT / "data").mkdir(parents=True, exist_ok=True)
+    _as_path(REMOTE_ROOT / "nemotron_dataset").mkdir(parents=True, exist_ok=True)
     _as_path(TRAIN_FILE).write_text(train_jsonl, encoding="utf-8")
     _as_path(VALIDATION_FILE).write_text(validation_jsonl, encoding="utf-8")
 
@@ -403,8 +403,8 @@ def main(
     epochs: float = 3.0,
     max_seq_length: int = 4096,
 ) -> None:
-    train_jsonl = Path("data/train.jsonl").read_text(encoding="utf-8")
-    validation_jsonl = Path("data/validation.jsonl").read_text(encoding="utf-8")
+    train_jsonl = Path("nemotron_dataset/train.jsonl").read_text(encoding="utf-8")
+    validation_jsonl = Path("nemotron_dataset/validation.jsonl").read_text(encoding="utf-8")
 
     if action == "train":
         call = train_lora.with_options(gpu=gpu).spawn(
