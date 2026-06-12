@@ -24,17 +24,20 @@ scripts/prepare_flux_lora_dataset.py # create resized FLUX training copy
 scripts/upload_dataset_to_modal.py # upload prepared FLUX dataset to Modal
 scripts/upload_flux_lora.py  # upload selected FLUX LoRA checkpoint to Hugging Face
 modal_train_flux_lora.py      # Modal FLUX.2 Klein LoRA training entrypoint
+modal_upload_flux_lora.py     # upload trained FLUX LoRA from Modal volume to Hugging Face
 configs/mythograph_flux2_klein_lora.yaml # ai-toolkit FLUX LoRA config
 ```
 
 ## Latest Results
 
-The latest fine-tuning run is summarized in:
+The latest fine-tuning runs are summarized in:
 
+- [reports/2026-06-13-flux2-klein-lora-results-report.md](reports/2026-06-13-flux2-klein-lora-results-report.md)
 - [reports/2026-06-10-finetuning-results-report.md](reports/2026-06-10-finetuning-results-report.md)
 
 Published Hugging Face artifacts:
 
+- FLUX.2 Klein style LoRA: https://huggingface.co/kasimakpinar/mythograph-atelier-flux2-klein-lora
 - LoRA adapter: https://huggingface.co/kasimakpinar/mythograph-nemotron-3-nano-4b-lora
 - GGUF Q4/Q5 model: https://huggingface.co/kasimakpinar/mythograph-nemotron-3-nano-4b-gguf
 
@@ -71,17 +74,23 @@ python scripts/upload_dataset_to_modal.py \
 Train on Modal:
 
 ```bash
-python -m modal run modal_train_flux_lora.py --gpu L4
+python -m modal run --detach modal_train_flux_lora.py --gpu A100
 ```
 
 For FLUX.2 Klein, train the LoRA on `black-forest-labs/FLUX.2-klein-base-4B`, then use the selected LoRA checkpoint at inference with `black-forest-labs/FLUX.2-klein-4B`. Do not GGUF-convert or quantize this model. Pick the best checkpoint by reviewing generated samples, usually around steps 750-1500 rather than blindly choosing the final checkpoint.
 
-After choosing the best `.safetensors` checkpoint, upload it under the same Hugging Face namespace used for the Nemotron artifacts:
+After choosing the best `.safetensors` checkpoint, upload it under the same Hugging Face namespace used for the Nemotron artifacts. If local Hugging Face auth is available, use:
 
 ```bash
 python scripts/upload_flux_lora.py \
   --checkpoint path/to/best_checkpoint.safetensors \
   --repo-id kasimakpinar/mythograph-atelier-flux2-klein-lora
+```
+
+If the checkpoint is already on the Modal volume and `HF_TOKEN` is configured as the Modal `huggingface` secret, upload directly from Modal:
+
+```bash
+python -m modal run modal_upload_flux_lora.py
 ```
 
 ## Validate the Data
